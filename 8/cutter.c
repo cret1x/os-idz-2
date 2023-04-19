@@ -15,12 +15,10 @@
 // first client to access open sem will change status of 
 // cutter to cutting and close sem
 
-#define CHILDREN_MAX 16
-
 static volatile int keepRunning = 1;
 
 typedef struct shared_memory {
-  sem_t *mutex;
+  sem_t mutex;
   int current_client;
 }shared_memory;
 
@@ -31,31 +29,11 @@ void intHandler(int dummy) {
 }
 
 
-void child(shared_memory *shmem)  {
-  printf("I am a client #%d!\n", getpid());
-  srand(time(0));
-  sleep(rand() % 10 + 2);
-  
-  sem_wait(shmem->mutex);
-  printf("[%d] Going to cutter\n", getpid());
-  shmem->current_client = getpid();
-  exit(0);
-}
 
 
 
 int main(int argc, char ** argv) {
-  if (argc < 2) {
-    printf("usage: ./main <clients count>");
-    return -1;
-  }
   signal(SIGINT, intHandler);
-  int clients = atoi(argv[1]);
-  if (clients < 1 || clients > CHILDREN_MAX) {
-    printf("Invalid clients count!\n");
-    return -1;
-  }
-  int children[CHILDREN_MAX];
   char memn[] = "shared-memory"; //  имя объекта
   char sem_name[] = "sem-mutex";
   int mem_size = sizeof(shared_memory);
@@ -91,16 +69,7 @@ int main(int argc, char ** argv) {
       return 1;
   }
   shmem->current_client = 0;
-  shmem->mutex = mutex;
-
-
-  // create child processes
-  for (int i = 0; i < clients; i++) {
-    children[i] = fork();
-    if (children[i] == 0) {
-      child(shmem);
-    }
-  }
+  shmem->mutex = *mutex;
 
   printf("I am a Cutter\n");
   
@@ -114,13 +83,9 @@ int main(int argc, char ** argv) {
       sleep(5);
       printf("[Cutter] finished client #%d\n", clid);
       shmem->current_client = 0;
-      sem_post(shmem->mutex);
+      sem_post(&shmem->mutex);
     }
 
-  }
-  for (int i = 0; i < clients; i++) {
-    kill(children[i], SIGTERM);
-    printf("[Cutter] Killing child #%d\n", children[i]);
   }
 
   if (sem_unlink(sem_name) == -1) {
