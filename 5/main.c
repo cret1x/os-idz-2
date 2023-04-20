@@ -15,8 +15,6 @@
 // first client to access open sem will change status of 
 // cutter to cutting and close sem
 
-#define CHILDREN_MAX 16
-
 static volatile int keepRunning = 1;
 
 typedef struct shared_memory {
@@ -32,10 +30,10 @@ void intHandler(int dummy) {
 
 
 void child(shared_memory *shmem)  {
+  srand(time(NULL) ^ (getpid()<<16));
   printf("I am a client #%d!\n", getpid());
-  srand(time(0));
   sleep(rand() % 10 + 2);
-  
+  printf("[%d] In queue for cutter\n", getpid());
   sem_wait(&shmem->mutex);
   printf("[%d] Going to cutter\n", getpid());
   shmem->current_client = getpid();
@@ -51,11 +49,11 @@ int main(int argc, char ** argv) {
   }
   signal(SIGINT, intHandler);
   int clients = atoi(argv[1]);
-  if (clients < 1 || clients > CHILDREN_MAX) {
+  if (clients < 1) {
     printf("Invalid clients count!\n");
     return -1;
   }
-  int children[CHILDREN_MAX];
+  int* children = (int*) malloc(sizeof(int) * clients);
   char memn[] = "shared-memory"; //  имя объекта
   int mem_size = sizeof(shared_memory);
   int shm;
@@ -117,7 +115,7 @@ int main(int argc, char ** argv) {
     kill(children[i], SIGTERM);
     printf("[Cutter] Killing child #%d\n", children[i]);
   }
-
+  free(children);
   sem_destroy(&shmem->mutex);
   close(shm);
   // удалить выделенную память

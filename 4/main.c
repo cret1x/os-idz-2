@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <time.h>
 
 // status: 0 - cutter free; 1 - cuttting
 // buf: conatins ids of new client
@@ -14,8 +15,6 @@
 // when free, open it
 // first client to access open sem will change status of 
 // cutter to cutting and close sem
-
-#define CHILDREN_MAX 16
 
 static volatile int keepRunning = 1;
 
@@ -56,9 +55,10 @@ void sem_open(int semid) {
 
 
 void child(int semid, shared_memory* shmptr)  {
+  srand(time(NULL) ^ (getpid()<<16));
   printf("I am a client #%d!\n", getpid());
   sleep(rand() % 10 + 2);
-  
+  printf("[%d] In queue for cutter\n", getpid());
   sem_close(semid);
   printf("[%d] Going to cutter\n", getpid());
   shmptr->current_client = getpid();
@@ -74,7 +74,7 @@ int main(int argc, char ** argv) {
   }
   signal(SIGINT, intHandler);
   int clients = atoi(argv[1]);
-  if (clients < 1 || clients > 16) {
+  if (clients < 1) {
     printf("Invalid clients count!\n");
     return -1;
   }
@@ -83,7 +83,7 @@ int main(int argc, char ** argv) {
   int semid;
   int shmid;
 
-  int children[CHILDREN_MAX];
+  int* children = (int*) malloc(sizeof(int) * clients);
   
   if ((semid = semget(key, 1, 0666 | IPC_CREAT)) < 0) {
     printf("Can\'t create semaphore\n");
@@ -131,6 +131,8 @@ int main(int argc, char ** argv) {
     kill(children[i], SIGTERM);
     printf("[Cutter] Killing child #%d\n", children[i]);
   }
+
+  free(children);
 
   if (semctl(semid, 0, IPC_RMID, 0) < 0) {
 	printf("Can\'t delete semaphore\n");
