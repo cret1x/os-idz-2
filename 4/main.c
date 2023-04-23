@@ -9,26 +9,24 @@
 #include <signal.h>
 #include <time.h>
 
-// status: 0 - cutter free; 1 - cuttting
-// buf: conatins ids of new client
-// when cutter is cutting he will close sem
-// when free, open it
-// first client to access open sem will change status of 
-// cutter to cutting and close sem
+
 
 static volatile int keepRunning = 1;
 
+
+// Struct for memory
 typedef struct shared_memory {
-  int status;
   int current_client;
 }shared_memory;
 
 
+// Function to handle SIGINT
 void intHandler(int dummy) {
     printf("[Cutter] SIGINT Detected!\n");
     keepRunning = 0;
 }
 
+// Function to -1 semaphore
 void sem_close(int semid) {
  struct sembuf parent_buf = {
     .sem_num = 0,
@@ -41,6 +39,7 @@ void sem_close(int semid) {
   }
 }
 
+// Function to +1 semaphore
 void sem_open(int semid) {
  struct sembuf parent_buf = {
     .sem_num = 0,
@@ -54,6 +53,7 @@ void sem_open(int semid) {
 }
 
 
+// Function for client
 void child(int semid, shared_memory* shmptr)  {
   srand(time(NULL) ^ (getpid()<<16));
   printf("I am a client #%d!\n", getpid());
@@ -85,6 +85,7 @@ int main(int argc, char ** argv) {
 
   int* children = (int*) malloc(sizeof(int) * clients);
   
+  // Create memory and semaphore
   if ((semid = semget(key, 1, 0666 | IPC_CREAT)) < 0) {
     printf("Can\'t create semaphore\n");
     return -1;
@@ -100,7 +101,6 @@ int main(int argc, char ** argv) {
   } 
   semctl(semid, 0, SETVAL, 1);
 
-  shared_mem_ptr->status = 0;
   shared_mem_ptr->current_client = 0;
 
   // create child processes
@@ -127,11 +127,14 @@ int main(int argc, char ** argv) {
     }
 
   }
+
+  // Kill children if alive
   for (int i = 0; i < clients; i++) {
     kill(children[i], SIGTERM);
     printf("[Cutter] Killing child #%d\n", children[i]);
   }
 
+  // Clean up memory and delete shmem and sem
   free(children);
 
   if (semctl(semid, 0, IPC_RMID, 0) < 0) {
